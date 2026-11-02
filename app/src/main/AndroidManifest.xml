@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <application
         android:name=".JarvisApp"
@@ -47,12 +49,38 @@
             </intent-filter>
         </activity>
 
+        <!-- The Forge 3D Reactor WebGL Website Builder -->
+        <activity
+            android:name=".ui.TheForgeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.JarvisAI" />
+
         <!-- Foreground Service for Continuous Background Voice Assistance -->
         <service
             android:name=".service.JarvisVoiceService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- Screen Share MediaProjection Foreground Service -->
+        <service
+            android:name=".service.ScreenShareService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!-- Jarvis AI Input Method Service (Keyboard) -->
+        <service
+            android:name=".service.JarvisKeyboardService"
+            android:exported="true"
+            android:label="Jarvis AI Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
 
     </application>
 
