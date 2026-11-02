@@ -8,9 +8,11 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,9 +26,12 @@ import androidx.lifecycle.lifecycleScope
 import com.jarvis.ai.ai.GeminiClient
 import com.jarvis.ai.service.DeviceActionsManager
 import com.jarvis.ai.service.JarvisVoiceService
+import com.jarvis.ai.service.ScreenShareService
 import com.jarvis.ai.ui.JarvisMainScreen
+import com.jarvis.ai.ui.TheForgeActivity
 import com.jarvis.ai.ui.components.ChatMessage
 import com.jarvis.ai.ui.theme.JarvisAITheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -42,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private var jarvisState by mutableStateOf("IDLE")
     private val messages = mutableStateListOf<ChatMessage>()
     private var apiKey by mutableStateOf("")
+    private var isScreenShareActive by mutableStateOf(false)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -79,7 +85,7 @@ class MainActivity : ComponentActivity() {
         messages.add(
             ChatMessage(
                 sender = "jarvis",
-                text = "Hello! I am Jarvis, your personal AI assistant. Tap the microphone or type to give me a command."
+                text = "Welcome to Jarvis AI. The Forge 3D Reactor, AI Keyboard, Screen Sharing, and 18 Device Tools are active and ready."
             )
         )
 
@@ -93,6 +99,7 @@ class MainActivity : ComponentActivity() {
                     state = jarvisState,
                     messages = messages,
                     apiKey = apiKey,
+                    isScreenShareActive = isScreenShareActive,
                     onSaveApiKey = { newKey ->
                         apiKey = newKey
                         prefs.edit().putString("gemini_api_key", newKey).apply()
@@ -101,16 +108,92 @@ class MainActivity : ComponentActivity() {
                     },
                     onStartListening = { startListening() },
                     onStopListening = { stopListening() },
-                    onSendMessage = { text -> handleUserCommand(text) }
+                    onSendMessage = { text -> handleUserCommand(text) },
+                    onLaunchForge = { prompt -> launchForge(prompt) },
+                    onToggleScreenShare = { toggleScreenShare() },
+                    onOpenKeyboardSettings = { openKeyboardSettings() },
+                    onShowKeyboardPicker = { showKeyboardPicker() },
+                    onExecuteTool = { tool, query -> executeDirectTool(tool, query) }
                 )
             }
         }
     }
 
+    private fun launchForge(prompt: String) {
+        val finalPrompt = prompt.ifBlank { "Futuristic Cyberpunk Portfolio Website" }
+        val intent = Intent(this, TheForgeActivity::class.java).apply {
+            putExtra("website_prompt", finalPrompt)
+        }
+        startActivity(intent)
+        messages.add(ChatMessage(sender = "jarvis", text = "Launching The Forge 3D Reactor for: '$finalPrompt'", toolNotice = "build_website"))
+    }
+
+    private fun toggleScreenShare() {
+        val intent = Intent(this, ScreenShareService::class.java)
+        if (isScreenShareActive) {
+            stopService(intent)
+            isScreenShareActive = false
+            Toast.makeText(this, "Screen Share Stopped", Toast.LENGTH_SHORT).show()
+            messages.add(ChatMessage(sender = "jarvis", text = "Screen sharing stopped.", toolNotice = "ScreenShareService"))
+        } else {
+            ContextCompat.startForegroundService(this, intent)
+            isScreenShareActive = true
+            Toast.makeText(this, "Screen Share Broadcasting Started", Toast.LENGTH_SHORT).show()
+            messages.add(ChatMessage(sender = "jarvis", text = "Screen sharing broadcast is now LIVE.", toolNotice = "ScreenShareService"))
+        }
+    }
+
+    private fun openKeyboardSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            Toast.makeText(this, "Enable 'Jarvis AI Keyboard' in list", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not open settings: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showKeyboardPicker() {
+        try {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showInputMethodPicker()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not show picker: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun executeDirectTool(tool: String, query: String): String {
+        val result = when (tool) {
+            "flashlight_on" -> actionsManager.controlDevice("flashlight", true)
+            "flashlight_off" -> actionsManager.controlDevice("flashlight", false)
+            "phone_status" -> actionsManager.getPhoneStatus()
+            "volume_80" -> actionsManager.setVolume(80)
+            "volume_30" -> actionsManager.setVolume(30)
+            "spotify" -> actionsManager.searchSpotify(query.ifBlank { "Top Hits 2026" })
+            "youtube" -> actionsManager.searchYouTube(query.ifBlank { "Jarvis AI Assistant" })
+            "camera" -> actionsManager.openCamera()
+            "sketch" -> actionsManager.startSketchDrawing()
+            "datetime" -> actionsManager.getCurrentDateTime()
+            "forge" -> {
+                launchForge(query)
+                "Launching The Forge 3D..."
+            }
+            else -> "Executed $tool"
+        }
+
+        messages.add(ChatMessage(sender = "user", text = "⚡ Quick Action: $tool"))
+        messages.add(ChatMessage(sender = "jarvis", text = result, toolNotice = "Native Tool"))
+        voiceService?.speak(result) {}
+        return result
+    }
+
     private fun checkPermissions() {
         val permissions = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CALL_PHONE
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.CAMERA
         )
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -208,9 +291,8 @@ class MainActivity : ComponentActivity() {
                 jarvisState = "IDLE"
             }
 
-            // Fallback reset to IDLE after speaking duration estimation
             val estimatedDelay = (reply.length * 70L).coerceIn(2000L, 8000L)
-            kotlinx.coroutines.delay(estimatedDelay)
+            delay(estimatedDelay)
             if (jarvisState == "SPEAKING") {
                 jarvisState = "IDLE"
             }
