@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Jarvis AI</string>
+    <string name="welcome_message">Hello! I am Jarvis, your personal AI voice assistant. Tap the mic or type to command me.</string>
+    <string name="listening_status">Jarvis is listening...</string>
+    <string name="thinking_status">Jarvis is thinking...</string>
+    <string name="speaking_status">Jarvis is speaking...</string>
+    <string name="idle_status">Jarvis is ready.</string>
+</resources>
