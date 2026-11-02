@@ -166,8 +166,8 @@ class MainActivity : ComponentActivity() {
 
     private fun executeDirectTool(tool: String, query: String): String {
         val result = when (tool) {
-            "flashlight_on" -> actionsManager.controlDevice("flashlight", true)
-            "flashlight_off" -> actionsManager.controlDevice("flashlight", false)
+            "flashlight_on" -> actionsManager.controlDevice("flashlight", "on")
+            "flashlight_off" -> actionsManager.controlDevice("flashlight", "off")
             "phone_status" -> actionsManager.getPhoneStatus()
             "volume_80" -> actionsManager.setVolume(80)
             "volume_30" -> actionsManager.setVolume(30)
